@@ -1,6 +1,7 @@
 module ElasticWhenever
   class Task
     class Target
+      attr_reader :id
       attr_reader :cluster
       attr_reader :definition
       attr_reader :container
@@ -26,16 +27,18 @@ module ElasticWhenever
             container: input[:containerOverrides].first[:name],
             commands: input[:containerOverrides].first[:command],
             rule: rule,
-            role: Role.new(option)
+            role: Role.new(option),
+            id: target.id
           )
         end
       end
 
-      def initialize(option, cluster:, definition:, container:, commands:, rule:, role:)
+      def initialize(option, cluster:, definition:, container:, commands:, rule:, role:, id: nil)
         unless definition.containers.include?(container)
           raise InvalidContainerException.new("#{container} is invalid container. valid=#{definition.containers.join(",")}")
         end
 
+        @id = id
         @cluster = cluster
         @definition = definition
         @container = container
@@ -63,6 +66,10 @@ module ElasticWhenever
             }
           ]
         )
+      end
+
+      def delete
+        client.remove_targets(rule: rule.name, ids: [id])
       end
 
       private

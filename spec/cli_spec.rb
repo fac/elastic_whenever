@@ -57,6 +57,58 @@ RSpec.describe ElasticWhenever::CLI do
       end
     end
 
+    context "with patch mode" do
+      let(:args) do
+        %W(
+          -p test
+          --region us-east-1
+          -f #{Pathname(__dir__) + "fixtures/schedule.rb"}
+          --cluster test
+          --task-definition wordpress:2
+          --container testContainer
+        )
+      end
+
+      before do
+        allow(role).to receive(:create)
+      end
+
+      it "creates the missing tasks" do
+        expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([])
+        expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
+        expect_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
+        expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
+        expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
+      end
+
+      context "with existing targets" do
+        let(:rule) { double }
+        let(:target) { double(commands: task.commands.first) }
+
+        it "does not create a target that already exists" do
+          expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([rule])
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([target])
+          expect_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
+          expect_any_instance_of(ElasticWhenever::Task::Target).to_not receive(:create)
+          expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
+        end
+      end
+
+      context "when a target should be removed" do
+        let(:rule) { double }
+        let(:target) { double(commands: ["command", "to", "remove"]) }
+
+        it "removes targets that don't exist in the new schedule" do
+          expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([rule])
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([target])
+          expect(target).to receive(:destroy)
+          expect_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
+          expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
+          expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
+        end
+      end
+    end
+
     context "with update mode" do
       let(:args) do
         %W(

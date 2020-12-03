@@ -18,6 +18,9 @@ module ElasticWhenever
             update_tasks(option, dry_run: false)
           end
           Logger.instance.log("write", "scheduled tasks updated")
+        when Option::PATCH_MODE
+          option.validate!
+          patch_tasks(option, dry_run: false)
         when Option::CLEAR_MODE
           with_concurrent_modification_handling do
             clear_tasks(option)
@@ -47,6 +50,77 @@ module ElasticWhenever
       end
 
       private
+
+      def patch_tasks(option, dry_run:)
+        schedule = Schedule.new(option.schedule_file, option.verbose, option.variables)
+
+        cluster = Task::Cluster.new(option, option.cluster)
+        definition = Task::Definition.new(option, option.task_definition)
+        role = Task::Role.new(option)
+        if !role.exists? && !dry_run
+          role.create
+        end
+
+        remote_rules = Task::Rule.fetch(option)
+        rules = []
+        schedule.tasks.each do |task|
+          rule = Task::Rule.convert(option, task)
+          rule.create
+
+          remote_targets = Task::Target.fetch(option, rule)
+
+          targets = task.commands.map do |command|
+            Task::Target.new(
+              option,
+              cluster: cluster,
+              definition: definition,
+              container: option.container,
+              commands: command,
+              rule: rule,
+              role: role,
+            )
+          end
+
+          # Iterate over all targets and create if not already there
+          targets.each do |target|
+            exists = remote_targets.any? do |remote_target|
+              remote_target.commands == target.commands
+            end
+
+            unless exists
+              puts "Create target: #{target.commands}"
+              target.create
+            end
+          end
+
+          # Destroy all targets that are no longer valid
+          remote_targets.each do |remote_target|
+            exists = targets.any? do |target|
+              remote_target.commands == target.commands
+            end
+
+            unless exists
+              puts "Delete target: #{remote_target.commands}"
+              remote_target.delete
+            end
+          end
+
+          rules << rule
+        end
+
+        remote_rules.each do |remote_rule|
+          remote_targets = Task::Target.fetch(option, remote_rule)
+
+          exists = rules.any? do |rule|
+            rule.name == remote_rule.name
+          end
+
+          if remote_targets.empty? || !exists
+            puts "Delete rule: #{remote_rule.name}"
+            remote_rule.delete
+          end
+        end
+      end
 
       def update_tasks(option, dry_run:)
         schedule = Schedule.new(option.schedule_file, option.verbose, option.variables)

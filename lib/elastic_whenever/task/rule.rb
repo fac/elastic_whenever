@@ -61,7 +61,7 @@ module ElasticWhenever
       private
 
       def self.rule_name(identifier, expression, commands)
-        "#{identifier}_#{Digest::SHA1.hexdigest([expression, commands.map { |command| command.join("-") }.join("-")].join("-"))}"
+        "#{identifier}_#{Digest::SHA1.hexdigest(expression)}"
       end
 
       def self.rule_description(identifier, expression, commands)
