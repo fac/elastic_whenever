@@ -7,7 +7,6 @@ module ElasticWhenever
     CLEAR_MODE = 3
     LIST_MODE = 4
     PRINT_VERSION_MODE = 5
-    PATCH_MODE = 6
 
     attr_reader :identifier
     attr_reader :mode
@@ -49,13 +48,9 @@ module ElasticWhenever
       @region = nil
 
       OptionParser.new do |opts|
-        opts.on('-i', '--update identifier', 'Clear and create scheduled tasks by schedule file') do |identifier|
+        opts.on('-i', '--update identifier', 'Creates and deletes tasks as needed by schedule file') do |identifier|
           @identifier = identifier
           @mode = UPDATE_MODE
-        end
-        opts.on('-p', '--patch identifier', 'Creates and deletes tasks as needed as per schedule file') do |identifier|
-          @identifier = identifier
-          @mode = PATCH_MODE
         end
         opts.on('-c', '--clear identifier', 'Clear scheduled tasks') do |identifier|
           @identifier = identifier

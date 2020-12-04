@@ -36,6 +36,11 @@ RSpec.describe ElasticWhenever::CLI do
         )
       end
 
+      before do
+        expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([])
+        expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
+      end
+
       it "updates tasks with dry run" do
         expect(role).not_to receive(:create)
         expect(ElasticWhenever::CLI).not_to receive(:clear_tasks)
@@ -52,15 +57,15 @@ RSpec.describe ElasticWhenever::CLI do
         OUTPUT
       end
 
-      it "retruns success status code" do
+      it "returns success status code" do
         expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
       end
     end
 
-    context "with patch mode" do
+    context "with update mode" do
       let(:args) do
         %W(
-          -p test
+          -i test
           --region us-east-1
           -f #{Pathname(__dir__) + "fixtures/schedule.rb"}
           --cluster test
@@ -74,16 +79,21 @@ RSpec.describe ElasticWhenever::CLI do
 
         allow_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
         allow_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
+        allow(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([])
+        allow(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
       end
 
       it "creates the missing tasks" do
-        expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([])
-        expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
-
         expect_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
         expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
 
         expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
+      end
+
+      it "receives schedule file name and variables" do
+        expect(ElasticWhenever::Schedule).to receive(:new).with((Pathname(__dir__) + "fixtures/schedule.rb").to_s, boolean, [{ key: "environment", value: "staging" }, { key: "foo", value: "bar" }])
+
+        ElasticWhenever::CLI.run(args.concat(%W(--set environment=staging&foo=bar)))
       end
 
       context "with existing targets" do
@@ -105,11 +115,6 @@ RSpec.describe ElasticWhenever::CLI do
 
       context "when a target doesn't exist" do
         let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
-
-        before do
-          expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([])
-          expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
-        end
 
         it "creates the target" do
           expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
@@ -182,41 +187,6 @@ RSpec.describe ElasticWhenever::CLI do
 
           expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
         end
-      end
-    end
-
-    context "with update mode" do
-      let(:args) do
-        %W(
-          -i test
-          --region us-east-1
-          -f #{Pathname(__dir__) + "fixtures/schedule.rb"}
-          --cluster test
-          --task-definition wordpress:2
-          --container testContainer
-        )
-      end
-
-      before do
-        allow(role).to receive(:create)
-        allow(ElasticWhenever::CLI).to receive(:clear_tasks).with(kind_of(ElasticWhenever::Option))
-        allow_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
-        allow_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
-      end
-
-      it "updates tasks and returns success status code" do
-        expect(role).to receive(:create)
-        expect(ElasticWhenever::CLI).to receive(:clear_tasks).with(kind_of(ElasticWhenever::Option))
-        expect_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
-        expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
-
-        expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
-      end
-
-      it "receives schedule file name and variables" do
-        expect(ElasticWhenever::Schedule).to receive(:new).with((Pathname(__dir__) + "fixtures/schedule.rb").to_s, boolean, [{ key: "environment", value: "staging" }, { key: "foo", value: "bar" }])
-
-        ElasticWhenever::CLI.run(args.concat(%W(--set environment=staging&foo=bar)))
       end
     end
 

@@ -18,9 +18,6 @@ module ElasticWhenever
             update_tasks(option, dry_run: false)
           end
           Logger.instance.log("write", "scheduled tasks updated")
-        when Option::PATCH_MODE
-          option.validate!
-          patch_tasks(option, dry_run: false)
         when Option::CLEAR_MODE
           with_concurrent_modification_handling do
             clear_tasks(option)
@@ -51,7 +48,7 @@ module ElasticWhenever
 
       private
 
-      def patch_tasks(option, dry_run:)
+      def update_tasks(option, dry_run:)
         schedule = Schedule.new(option.schedule_file, option.verbose, option.variables)
 
         cluster = Task::Cluster.new(option, option.cluster)
@@ -63,9 +60,7 @@ module ElasticWhenever
 
         remote_rules = Task::Rule.fetch(option)
         rules = schedule.tasks.map do |task|
-          rule = create_rule(option, task, remote_rules)
-
-          remote_targets = Task::Target.fetch(option, rule)
+          rule = Task::Rule.convert(option, task)
 
           targets = task.commands.map do |command|
             Task::Target.new(
@@ -79,25 +74,30 @@ module ElasticWhenever
             )
           end
 
-          create_missing_targets(targets, remote_targets)
-          delete_invalid_targets(targets, remote_targets)
+          remote_targets = Task::Target.fetch(option, rule)
+
+          if dry_run
+            print_task(rule, targets)
+          else
+            create_missing_rule(rule, remote_rules)
+            create_missing_targets(targets, remote_targets)
+            delete_invalid_targets(targets, remote_targets)
+          end
 
           # return the rule so we can remove any remote rules
           # which shouldn't exist
           rule
         end
-        delete_invalid_rules(option, rules, remote_rules)
+
+        delete_invalid_rules(option, rules, remote_rules) unless dry_run
       end
 
-      # Creates a rule from given a task
-      # Only persists the rule remotely if it does not exist
-      def create_rule(option, task, remote_rules)
-        rule = Task::Rule.convert(option, task)
+      # Creates a rule but only persists the rule remotely if it does not exist
+      def create_missing_rule(rule, remote_rules)
         exists = remote_rules.any? do |remote_rule|
           rule.name == remote_rule.name
         end
         rule.create unless exists
-        rule
       end
 
       # Creates a target if it doesn't exist already exist
@@ -133,45 +133,6 @@ module ElasticWhenever
 
           if remote_targets.empty? || !exists_in_schedule
             remote_rule.delete
-          end
-        end
-      end
-
-      def update_tasks(option, dry_run:)
-        schedule = Schedule.new(option.schedule_file, option.verbose, option.variables)
-
-        cluster = Task::Cluster.new(option, option.cluster)
-        definition = Task::Definition.new(option, option.task_definition)
-        role = Task::Role.new(option)
-        if !role.exists? && !dry_run
-          role.create
-        end
-
-        clear_tasks(option) unless dry_run
-        schedule.tasks.each do |task|
-          rule = Task::Rule.convert(option, task)
-          targets = task.commands.map do |command|
-            Task::Target.new(
-              option,
-              cluster: cluster,
-              definition: definition,
-              container: option.container,
-              commands: command,
-              rule: rule,
-              role: role,
-            )
-          end
-
-          if dry_run
-            print_task(rule, targets)
-          else
-            begin
-              rule.create
-            rescue Aws::CloudWatchEvents::Errors::ValidationException => exn
-              Logger.instance.warn("#{exn.message} Ignore this task: name=#{rule.name} expression=#{rule.expression}")
-              next
-            end
-            targets.each(&:create)
           end
         end
       end
