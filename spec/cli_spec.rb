@@ -17,6 +17,7 @@ RSpec.describe ElasticWhenever::CLI do
     let(:cluster) { double(arn: "arn:aws:ecs:us-east-1:123456789:cluster/test", name: "test") }
     let(:definition) { double(arn: "arn:aws:ecs:us-east-1:123456789:task-definition/wordpress:2", name: "wordpress:2", containers: ["testContainer"]) }
     let(:role) { double(arn: "arn:aws:ecs:us-east-1:123456789:role/testRole") }
+    let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4", description: "test - cron(0 0 * * ? *) - bundle exec bin/rails runner -e production Hoge.run") }
     before do
       allow(ElasticWhenever::Schedule).to receive(:new).with((Pathname(__dir__) + "fixtures/schedule.rb").to_s, boolean, kind_of(Array)).and_return(schedule)
       allow(ElasticWhenever::Task::Cluster).to receive(:new).with(kind_of(ElasticWhenever::Option), "test").and_return(cluster)
@@ -92,7 +93,6 @@ RSpec.describe ElasticWhenever::CLI do
       end
 
       context "with existing targets" do
-        let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
         let(:target) { double(commands: task.commands.first) }
 
         before do
@@ -109,8 +109,6 @@ RSpec.describe ElasticWhenever::CLI do
       end
 
       context "when a target doesn't exist" do
-        let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
-
         it "creates the target" do
           expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
 
@@ -119,7 +117,6 @@ RSpec.describe ElasticWhenever::CLI do
       end
 
       context "when a target should be removed" do
-        let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
         let(:target) { double(commands: ["command", "to", "remove"]) }
 
         before do
@@ -168,7 +165,6 @@ RSpec.describe ElasticWhenever::CLI do
       end
 
       context "when a rule has not changed" do
-        let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
         let(:target) { double(commands: task.commands.first) }
 
         before do
