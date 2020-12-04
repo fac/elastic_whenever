@@ -58,7 +58,7 @@ module ElasticWhenever
           role.create
         end
 
-        remote_rules = Task::Rule.fetch(option)
+        remote_rules = Task::Rule.fetch(option) unless dry_run
         rules = schedule.tasks.map do |task|
           rule = Task::Rule.convert(option, task)
 
@@ -74,12 +74,12 @@ module ElasticWhenever
             )
           end
 
-          remote_targets = Task::Target.fetch(option, rule)
-
           if dry_run
             print_task(rule, targets)
           else
             create_missing_rule(rule, remote_rules)
+
+            remote_targets = Task::Target.fetch(option, rule)
             create_missing_targets(targets, remote_targets)
             delete_invalid_targets(targets, remote_targets)
           end
@@ -95,7 +95,8 @@ module ElasticWhenever
       # Creates a rule but only persists the rule remotely if it does not exist
       def create_missing_rule(rule, remote_rules)
         exists = remote_rules.any? do |remote_rule|
-          rule.name == remote_rule.name
+          rule.name == remote_rule.name &&
+          rule.description == remote_rule.description
         end
         rule.create unless exists
       end

@@ -36,11 +36,6 @@ RSpec.describe ElasticWhenever::CLI do
         )
       end
 
-      before do
-        expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([])
-        expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
-      end
-
       it "updates tasks with dry run" do
         expect(role).not_to receive(:create)
         expect(ElasticWhenever::CLI).not_to receive(:clear_tasks)
