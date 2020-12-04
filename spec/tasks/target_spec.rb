@@ -159,4 +159,21 @@ RSpec.describe ElasticWhenever::Task::Target do
       end
     end
   end
+
+  describe "#delete" do
+    it "deletes a target" do
+      expect(client).to receive(:remove_targets).with(rule: rule.name, ids: ["123"])
+
+      ElasticWhenever::Task::Target.new(
+        option,
+        cluster: cluster,
+        definition: definition,
+        container: "testContainer",
+        commands: ["bundle", "exec", "rake", "spec"],
+        rule: rule,
+        role: role,
+        id: "123",
+      ).delete
+    end
+  end
 end
