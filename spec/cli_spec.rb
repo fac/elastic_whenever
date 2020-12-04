@@ -136,7 +136,7 @@ RSpec.describe ElasticWhenever::CLI do
 
         before do
           expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([rule])
-          expect(ElasticWhenever::Task::Target).to receive(:fetch).twice.and_return([])
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
         end
 
         it "removes the remote rule" do

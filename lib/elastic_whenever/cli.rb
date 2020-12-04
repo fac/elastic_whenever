@@ -3,33 +3,33 @@ module ElasticWhenever
     SUCCESS_EXIT_CODE = 0
     ERROR_EXIT_CODE = 1
 
-    attr_reader :args
+    attr_reader :args, :option
 
     def initialize(args)
       @args = args
+      @option = Option.new(args)
     end
 
     def run
-      option = Option.new(args)
       case option.mode
       when Option::DRYRUN_MODE
         option.validate!
-        update_tasks(option, dry_run: true)
+        update_tasks(dry_run: true)
         Logger.instance.message("Above is your schedule file converted to scheduled tasks; your scheduled tasks was not updated.")
         Logger.instance.message("Run `elastic_whenever --help' for more options.")
       when Option::UPDATE_MODE
         option.validate!
         with_concurrent_modification_handling do
-          update_tasks(option, dry_run: false)
+          update_tasks(dry_run: false)
         end
         Logger.instance.log("write", "scheduled tasks updated")
       when Option::CLEAR_MODE
         with_concurrent_modification_handling do
-          clear_tasks(option)
+          clear_tasks
         end
         Logger.instance.log("write", "scheduled tasks cleared")
       when Option::LIST_MODE
-        list_tasks(option)
+        list_tasks
         Logger.instance.message("Above is your scheduled tasks.")
         Logger.instance.message("Run `elastic_whenever --help` for more options.")
       when Option::PRINT_VERSION_MODE
@@ -53,7 +53,7 @@ module ElasticWhenever
 
     private
 
-    def update_tasks(option, dry_run:)
+    def update_tasks(dry_run:)
       schedule = Schedule.new(option.schedule_file, option.verbose, option.variables)
 
       cluster = Task::Cluster.new(option, option.cluster)
@@ -63,7 +63,6 @@ module ElasticWhenever
         role.create
       end
 
-      remote_rules = Task::Rule.fetch(option) unless dry_run
       rules = schedule.tasks.map do |task|
         rule = Task::Rule.convert(option, task)
 
@@ -82,7 +81,7 @@ module ElasticWhenever
         if dry_run
           print_task(rule, targets)
         else
-          create_missing_rule(rule, remote_rules)
+          create_missing_rule(rule)
 
           remote_targets = Task::Target.fetch(option, rule)
           create_missing_targets(targets, remote_targets)
@@ -94,11 +93,15 @@ module ElasticWhenever
         rule
       end
 
-      delete_invalid_rules(option, rules, remote_rules) unless dry_run
+      delete_invalid_rules(rules) unless dry_run
+    end
+
+    def remote_rules
+      @remote_rules ||= Task::Rule.fetch(option)
     end
 
     # Creates a rule but only persists the rule remotely if it does not exist
-    def create_missing_rule(rule, remote_rules)
+    def create_missing_rule(rule)
       exists = remote_rules.any? do |remote_rule|
         rule.name == remote_rule.name &&
         rule.description == remote_rule.description
@@ -130,7 +133,7 @@ module ElasticWhenever
 
     # Deletes rules which no longer have targets or
     # have been completely removed from the schedule
-    def delete_invalid_rules(option, rules, remote_rules)
+    def delete_invalid_rules(rules)
       remote_rules.each do |remote_rule|
         remote_targets = Task::Target.fetch(option, remote_rule)
         exists_in_schedule = rules.any? do |rule|
@@ -143,11 +146,11 @@ module ElasticWhenever
       end
     end
 
-    def clear_tasks(option)
+    def clear_tasks
       Task::Rule.fetch(option).each(&:delete)
     end
 
-    def list_tasks(option)
+    def list_tasks
       Task::Rule.fetch(option).each do |rule|
         targets = Task::Target.fetch(option, rule)
         print_task(rule, targets)
