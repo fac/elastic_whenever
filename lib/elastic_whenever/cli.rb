@@ -107,9 +107,7 @@ module ElasticWhenever
             remote_target.commands == target.commands
           end
 
-          unless exists
-            target.create
-          end
+          target.create unless exists
         end
       end
 
@@ -120,9 +118,7 @@ module ElasticWhenever
             remote_target.commands == target.commands
           end
 
-          unless exists
-            remote_target.delete
-          end
+          remote_target.delete unless exists
         end
       end
 
@@ -131,12 +127,11 @@ module ElasticWhenever
       def delete_invalid_rules(option, rules, remote_rules)
         remote_rules.each do |remote_rule|
           remote_targets = Task::Target.fetch(option, remote_rule)
-          exists = rules.any? do |rule|
+          exists_in_schedule = rules.any? do |rule|
             rule.name == remote_rule.name
           end
 
-          if remote_targets.empty? || !exists
-            puts "Delete rule: #{remote_rule.name}"
+          if remote_targets.empty? || !exists_in_schedule
             remote_rule.delete
           end
         end
