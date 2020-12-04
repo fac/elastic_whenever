@@ -71,39 +71,115 @@ RSpec.describe ElasticWhenever::CLI do
 
       before do
         allow(role).to receive(:create)
+
+        allow_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
+        allow_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
       end
 
       it "creates the missing tasks" do
         expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([])
         expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
+
         expect_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
         expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
+
         expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
       end
 
       context "with existing targets" do
-        let(:rule) { double }
+        let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
         let(:target) { double(commands: task.commands.first) }
 
-        it "does not create a target that already exists" do
+        before do
           expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([rule])
-          expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([target])
-          expect_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).twice.and_return([target])
+        end
+
+        it "does not recreate a target that already exists" do
           expect_any_instance_of(ElasticWhenever::Task::Target).to_not receive(:create)
+          expect(target).not_to receive(:delete)
+
+          expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
+        end
+      end
+
+      context "when a target doesn't exist" do
+        let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
+
+        before do
+          expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([])
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([])
+        end
+
+        it "creates the target" do
+          expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
+
           expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
         end
       end
 
       context "when a target should be removed" do
-        let(:rule) { double }
+        let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
         let(:target) { double(commands: ["command", "to", "remove"]) }
 
-        it "removes targets that don't exist in the new schedule" do
+        before do
           expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([rule])
-          expect(ElasticWhenever::Task::Target).to receive(:fetch).and_return([target])
-          expect(target).to receive(:destroy)
-          expect_any_instance_of(ElasticWhenever::Task::Rule).to receive(:create)
-          expect_any_instance_of(ElasticWhenever::Task::Target).to receive(:create)
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).twice.and_return([target])
+        end
+
+        it "removes targets that don't exist in the new schedule" do
+          expect(target).to receive(:delete)
+
+          expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
+        end
+      end
+
+      context "when a rule should be updated" do
+        let(:rule) { double(name: "test_a11566") }
+
+        before do
+          expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([rule])
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).twice.and_return([])
+        end
+
+        it "removes the remote rule" do
+          expect(rule).to receive(:delete)
+
+          expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
+        end
+      end
+
+      context "when a scheudle has been removed" do
+        let(:rule) { double(name: "test_a11566") }
+        let(:schedule) do
+          double(environment: "production", chronic_options: {}, tasks: [])
+        end
+
+        before do
+          expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([rule])
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).with(kind_of(ElasticWhenever::Option), rule).and_return([])
+        end
+
+        it "removes the remote rule" do
+          expect(rule).to receive(:delete)
+
+          expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
+        end
+      end
+
+      context "when a rule has not changed" do
+        let(:rule) { double(name: "test_a1195a39879a5cfc2bb1ab2ba406820bec450ab4") }
+        let(:target) { double(commands: task.commands.first) }
+
+        before do
+          expect(ElasticWhenever::Task::Rule).to receive(:fetch).and_return([rule])
+          expect(ElasticWhenever::Task::Target).to receive(:fetch).twice.and_return([target])
+        end
+
+        it "does not recreate the rule" do
+          expect_any_instance_of(ElasticWhenever::Task::Rule).not_to receive(:create)
+          expect(rule).not_to receive(:delete)
+
           expect(ElasticWhenever::CLI.run(args)).to eq ElasticWhenever::CLI::SUCCESS_EXIT_CODE
         end
       end

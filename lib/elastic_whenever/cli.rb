@@ -62,10 +62,8 @@ module ElasticWhenever
         end
 
         remote_rules = Task::Rule.fetch(option)
-        rules = []
-        schedule.tasks.each do |task|
-          rule = Task::Rule.convert(option, task)
-          rule.create
+        rules = schedule.tasks.map do |task|
+          rule = create_rule(option, task, remote_rules)
 
           remote_targets = Task::Target.fetch(option, rule)
 
@@ -81,36 +79,58 @@ module ElasticWhenever
             )
           end
 
-          # Iterate over all targets and create if not already there
-          targets.each do |target|
-            exists = remote_targets.any? do |remote_target|
-              remote_target.commands == target.commands
-            end
+          create_missing_targets(targets, remote_targets)
+          delete_invalid_targets(targets, remote_targets)
 
-            unless exists
-              puts "Create target: #{target.commands}"
-              target.create
-            end
-          end
-
-          # Destroy all targets that are no longer valid
-          remote_targets.each do |remote_target|
-            exists = targets.any? do |target|
-              remote_target.commands == target.commands
-            end
-
-            unless exists
-              puts "Delete target: #{remote_target.commands}"
-              remote_target.delete
-            end
-          end
-
-          rules << rule
+          # return the rule so we can remove any remote rules
+          # which shouldn't exist
+          rule
         end
+        delete_invalid_rules(option, rules, remote_rules)
+      end
 
+      # Creates a rule from given a task
+      # Only persists the rule remotely if it does not exist
+      def create_rule(option, task, remote_rules)
+        rule = Task::Rule.convert(option, task)
+        exists = remote_rules.any? do |remote_rule|
+          rule.name == remote_rule.name
+        end
+        rule.create unless exists
+        rule
+      end
+
+      # Creates a target if it doesn't exist already exist
+      def create_missing_targets(targets, remote_targets)
+        targets.each do |target|
+          exists = remote_targets.any? do |remote_target|
+            remote_target.commands == target.commands
+          end
+
+          unless exists
+            target.create
+          end
+        end
+      end
+
+      # Deletes a target which has been removed
+      def delete_invalid_targets(targets, remote_targets)
+        remote_targets.each do |remote_target|
+          exists = targets.any? do |target|
+            remote_target.commands == target.commands
+          end
+
+          unless exists
+            remote_target.delete
+          end
+        end
+      end
+
+      # Deletes rules which no longer have targets or
+      # have been completely removed from the schedule
+      def delete_invalid_rules(option, rules, remote_rules)
         remote_rules.each do |remote_rule|
           remote_targets = Task::Target.fetch(option, remote_rule)
-
           exists = rules.any? do |rule|
             rule.name == remote_rule.name
           end
